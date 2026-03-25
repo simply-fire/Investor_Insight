@@ -95,18 +95,23 @@ async function run() {
     });
 
     const checks = [
-      ["fundamental-agent", fundamental.ok && validateFundamental(fundamental.body)],
-      ["technical-agent", technical.ok && validateTechnical(technical.body)],
-      ["news-agent", news.ok && validateNews(news.body)],
-      ["macro-agent", macro.ok && validateMacro(macro.body)],
-      ["verdict-agent", verdict.ok && validateVerdict(verdict.body)],
+      ["fundamental-agent", fundamental.ok && validateFundamental(fundamental.body), fundamental],
+      ["technical-agent", technical.ok && validateTechnical(technical.body), technical],
+      ["news-agent", news.ok && validateNews(news.body), news],
+      ["macro-agent", macro.ok && validateMacro(macro.body), macro],
+      ["verdict-agent", verdict.ok && validateVerdict(verdict.body), verdict],
     ] as const;
 
-    for (const [name, pass] of checks) {
-      console.log(`${name}: ${pass ? "PASS" : "FAIL"}`);
+    console.log("\n=== TEST RESULTS ===\n");
+    for (const [name, pass, result] of checks) {
+      console.log(`${name}: ${pass ? "✅ PASS" : "❌ FAIL"}`);
+      if (!pass) {
+        console.log(`  Status: ${result.status}`);
+        console.log(`  Response:`, JSON.stringify(result.body, null, 2));
+      }
     }
 
-    console.log("\nverdict-agent output:");
+    console.log("\n=== VERDICT-AGENT FULL OUTPUT ===");
     console.log(JSON.stringify(verdict.body, null, 2));
   } finally {
     server.kill();

@@ -144,6 +144,8 @@ serve(async (req: Request): Promise<Response> => {
 			});
 		}
 
+		console.log("[fundamental-agent] Starting analysis for", ticker);
+
 		const supabaseUrl = Deno.env.get("SUPABASE_URL") ?? Deno.env.get("NEXT_PUBLIC_SUPABASE_URL") ?? "";
 		const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
 		if (supabaseUrl && supabaseKey) {
@@ -152,21 +154,25 @@ serve(async (req: Request): Promise<Response> => {
 
 		const alphaKey = Deno.env.get("ALPHA_VANTAGE_KEY");
 		if (!alphaKey) {
+			console.error("[fundamental-agent] ALPHA_VANTAGE_KEY is missing!");
 			return new Response(
 				JSON.stringify({ error: "ALPHA_VANTAGE_KEY is missing", detail: "Set env var and retry." }),
 				{ status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } },
 			);
 		}
 
+		console.log("[fundamental-agent] Fetching from Alpha Vantage...");
 		const overviewUrl = `https://www.alphavantage.co/query?function=OVERVIEW&symbol=${encodeURIComponent(ticker)}&apikey=${encodeURIComponent(alphaKey)}`;
 		const overviewResponse = await fetch(overviewUrl);
 		if (!overviewResponse.ok) {
+			console.error("[fundamental-agent] Alpha Vantage error:", overviewResponse.status, overviewResponse.statusText);
 			return new Response(JSON.stringify({ error: "Failed to fetch Alpha Vantage overview" }), {
 				status: 502,
 				headers: { ...corsHeaders, "Content-Type": "application/json" },
 			});
 		}
 
+		console.log("[fundamental-agent] Alpha Vantage response received");
 		const raw = await overviewResponse.json();
 
 		const peRatio = toNumber(raw?.PERatio);
@@ -236,8 +242,9 @@ serve(async (req: Request): Promise<Response> => {
 		});
 	} catch (error) {
 		console.error("[fundamental-agent] Error:", error);
+		const errorMessage = error instanceof Error ? error.message : String(error);
 		return new Response(
-			JSON.stringify({ error: "Analysis failed", detail: error instanceof Error ? error.message : String(error) }),
+			JSON.stringify({ error: "Analysis failed", detail: errorMessage }),
 			{ status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } },
 		);
 	}

@@ -1,6 +1,5 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-import YahooFinance from "https://esm.sh/yahoo-finance2@3.13.2";
 
 import { corsHeaders } from "../_shared/cors.ts";
 
@@ -32,8 +31,6 @@ type TechnicalAgentOutput = {
 	overall_signal: string;
 };
 
-const yahoo = new YahooFinance({ suppressNotices: ["yahooSurvey", "ripHistorical"] });
-
 function average(values: number[]): number {
 	if (!values.length) return 0;
 	return values.reduce((sum, v) => sum + v, 0) / values.length;
@@ -41,6 +38,48 @@ function average(values: number[]): number {
 
 function round(value: number): number {
 	return Math.round(value * 100) / 100;
+}
+
+async function fetchAlphaVantageOHLCV(ticker: string, apiKey: string): Promise<OHLCV[]> {
+	const url = `https://www.alphavantage.co/query?function=TIME_SERIES_DAILY&symbol=${encodeURIComponent(ticker)}&outputsize=compact&apikey=${encodeURIComponent(apiKey)}`;
+	const response = await fetch(url);
+	if (!response.ok) {
+		throw new Error(`Alpha Vantage request failed: HTTP ${response.status}`);
+	}
+	const data = await response.json() as Record<string, unknown>;
+
+	const info = typeof data["Information"] === "string" ? data["Information"] : "";
+	const note = typeof data["Note"] === "string" ? data["Note"] : "";
+	const errorMessage = typeof data["Error Message"] === "string" ? data["Error Message"] : "";
+	if (info) {
+		throw new Error(`Alpha Vantage info: ${info}`);
+	}
+	if (note) {
+		throw new Error(`Alpha Vantage note: ${note}`);
+	}
+	if (errorMessage) {
+		throw new Error(`Alpha Vantage error: ${errorMessage}`);
+	}
+
+	const timeSeries = data["Time Series (Daily)"] as Record<string, Record<string, unknown>> | undefined;
+	if (!timeSeries) {
+		throw new Error("Alpha Vantage response missing Time Series (Daily)");
+	}
+
+	const dates = Object.keys(timeSeries).sort();
+	const ohlcv: OHLCV[] = dates.slice(-200).map((date) => {
+		const candle = timeSeries[date];
+		return {
+			date,
+			open: Number(candle["1. open"] ?? 0),
+			high: Number(candle["2. high"] ?? 0),
+			low: Number(candle["3. low"] ?? 0),
+			close: Number(candle["4. close"] ?? 0),
+			volume: Number(candle["5. volume"] ?? 0),
+		};
+	});
+
+	return ohlcv;
 }
 
 function calculateEmaSeries(values: number[], period: number): number[] {
@@ -126,26 +165,28 @@ serve(async (req: Request): Promise<Response> => {
 			createClient(supabaseUrl, supabaseKey);
 		}
 
-		const period1 = new Date();
-		const period2 = new Date();
-		period1.setDate(period1.getDate() - 430);
+		const alphaKey = Deno.env.get("ALPHA_VANTAGE_KEY");
+		if (!alphaKey) {
+			return new Response(
+				JSON.stringify({ error: "ALPHA_VANTAGE_KEY is missing" }),
+				{ status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+			);
+		}
 
-		const [quote, candlesRaw] = await Promise.all([
-			yahoo.quote(ticker),
-			yahoo.historical(ticker, { period1, period2, interval: "1d" }),
-		]);
+		let candles: OHLCV[] = [];
 
-		const candles: OHLCV[] = candlesRaw
-			.filter((row) => row.date && row.open && row.high && row.low && row.close)
-			.map((row) => ({
-				date: row.date.toISOString(),
-				open: Number(row.open ?? 0),
-				high: Number(row.high ?? 0),
-				low: Number(row.low ?? 0),
-				close: Number(row.close ?? 0),
-				volume: Number(row.volume ?? 0),
-			}))
-			.slice(-200);
+		try {
+			candles = await fetchAlphaVantageOHLCV(ticker, alphaKey);
+		} catch (error) {
+			console.error("[technical-agent] Alpha Vantage error:", error);
+			return new Response(
+				JSON.stringify({ 
+					error: "Technical data unavailable", 
+					detail: error instanceof Error ? error.message : "Failed to fetch OHLCV data"
+				}),
+				{ status: 502, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+			);
+		}
 
 		if (!candles.length) {
 			return new Response(JSON.stringify({ error: "No OHLCV data available" }), {
@@ -155,8 +196,7 @@ serve(async (req: Request): Promise<Response> => {
 		}
 
 		const closes = candles.map((c) => c.close);
-		const volumes = candles.map((c) => c.volume);
-		const currentPrice = Number(quote.regularMarketPrice ?? closes.at(-1) ?? 0);
+		const currentPrice = closes.at(-1) ?? 0;
 
 		const rsi = calculateRsiWilder(closes, 14);
 		const ema12Series = calculateEmaSeries(closes, 12);
