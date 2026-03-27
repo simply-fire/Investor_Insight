@@ -102,6 +102,11 @@ export interface FundamentalAgentOutput {
   profitability: ProfitabilityDimension;
   growth: GrowthDimension;
   financial_health: FinancialHealthDimension;
+  dividend?: {
+    dividend_yield: number;
+    score: number;
+    note: string;
+  };
   overall_score: number;
   summary: string;
 }
@@ -133,6 +138,8 @@ export interface TechnicalAgentOutput {
 
 export interface NewsStoryImpact {
   title: string;
+  source?: string;
+  url?: string;
   sentiment: number;
   impact: "SHORT" | "MEDIUM" | "LONG";
   one_line_impact: string;
@@ -181,7 +188,8 @@ export interface FullVerdicts {
 
 export interface AnalysisResult {
   ticker: string;
-  quote: QuoteData;
+  quote?: QuoteData;
+  ohlcv?: OHLCV[];
   fundamental: FundamentalAgentOutput;
   technical: TechnicalAgentOutput;
   news: NewsAgentOutput;

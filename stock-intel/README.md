@@ -1,36 +1,83 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Stock Intelligence Platform
 
-## Getting Started
+This is the Next.js app for the Stock Intelligence system. It integrates:
 
-First, run the development server:
+- Next.js frontend and API routes
+- Supabase local stack (database + edge functions)
+- Inngest background workflow runner
+
+## Prerequisites
+
+- Node.js 20+
+- npm
+- Docker Desktop (required by Supabase local)
+- Supabase CLI
+- Inngest CLI
+
+## Install Dependencies
+
+```bash
+npm install
+```
+
+## Environment
+
+1. Copy `.env.example` to `.env.local`.
+2. Fill required keys (Supabase, model providers, market/news APIs).
+
+At minimum for local orchestration/chat you will need:
+
+- `NEXT_PUBLIC_SUPABASE_URL`
+- `NEXT_PUBLIC_SUPABASE_ANON_KEY`
+- `SUPABASE_SERVICE_ROLE_KEY`
+- `MISTRAL_API_KEY`
+
+For local Inngest event publishing from Next.js route:
+
+- `INNGEST_DEV_URL=http://127.0.0.1:8288`
+- `INNGEST_DEV_EVENT_KEY=local` (optional; defaults to `local`)
+
+## Run Locally (Current Order)
+
+Start the system in this order using 3 terminals.
+
+### 1) Start Next.js first
 
 ```bash
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+App runs at `http://localhost:3000`.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+### 2) Start Supabase local stack
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+```bash
+npx supabase start
+```
 
-## Learn More
+This starts local Postgres, Studio, and Edge Functions runtime.
 
-To learn more about Next.js, take a look at the following resources:
+### 3) Start Inngest last
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+```bash
+npx inngest-cli@latest dev -u http://localhost:3000/api/inngest
+```
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+This connects Inngest dev server to your local Next.js route.
 
-## Deploy on Vercel
+## Quick Smoke Test
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+1. Open `http://localhost:3000`.
+2. Search for a ticker (example: `AAPL`).
+3. Confirm analysis starts (loading state), then tabs populate when cache row updates.
+4. Open Chat tab and send a prompt to verify SSE streaming.
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+## Useful Commands
+
+```bash
+# Stop Supabase local stack
+npx supabase stop
+
+# Check lints
+npm run lint
+```

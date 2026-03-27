@@ -29,6 +29,8 @@ type NewsAgentOutput = {
 	sentiment_label: "NEGATIVE" | "MILDLY_NEGATIVE" | "NEUTRAL" | "MILDLY_POSITIVE" | "POSITIVE";
 	top_stories: Array<{
 		title: string;
+		source: string;
+		url: string;
 		sentiment: number;
 		impact: "SHORT" | "MEDIUM" | "LONG";
 		one_line_impact: string;
@@ -222,6 +224,8 @@ serve(async (req: Request): Promise<Response> => {
 			.slice(0, 3)
 			.map((item) => ({
 				title: item.article.title,
+				source: item.article.source,
+				url: item.article.url,
 				sentiment: item.assessment.sentiment,
 				impact: item.assessment.impact,
 				one_line_impact: item.assessment.one_line_impact,

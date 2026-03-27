@@ -1,6 +1,8 @@
 import { createClient } from "@supabase/supabase-js";
 import { Inngest } from "inngest";
 
+import { fetchOHLCV, fetchQuote } from "@/lib/fetchers/yahoo";
+
 type AgentName = "fundamental-agent" | "technical-agent" | "news-agent" | "macro-agent" | "verdict-agent";
 
 type PersistedVerdict = {
@@ -65,7 +67,7 @@ function computeExpiry(): string {
 
 export const inngest = new Inngest({ 
   id: "stock-intel",
-  isDev: true,
+	isDev: process.env.NODE_ENV !== "production",
 });
 
 export const analyzeStock = inngest.createFunction(
@@ -76,7 +78,23 @@ export const analyzeStock = inngest.createFunction(
 			throw new Error("stock/analyze requires data.ticker");
 		}
 
-		const [fundamental, technical, news, macro] = await Promise.all([
+		const [quote, ohlcv, fundamental, technical, news, macro] = await Promise.all([
+			step.run("quote", async () => {
+				try {
+					return await fetchQuote(ticker);
+				} catch (error) {
+					console.error("[analyze-stock] quote fetch failed:", error);
+					return null;
+				}
+			}),
+			step.run("ohlcv", async () => {
+				try {
+					return await fetchOHLCV(ticker, 200);
+				} catch (error) {
+					console.error("[analyze-stock] ohlcv fetch failed:", error);
+					return [];
+				}
+			}),
 			step.run("fundamental-agent", async () => {
 				try {
 					return await callAgent("fundamental-agent", { ticker });
@@ -129,6 +147,8 @@ export const analyzeStock = inngest.createFunction(
 			const expiresAt = computeExpiry();
 			const payload = {
 				ticker,
+				quote,
+				ohlcv,
 				fundamental,
 				technical,
 				news,
@@ -176,6 +196,8 @@ export const analyzeStock = inngest.createFunction(
 
 		return {
 			ticker,
+			quote,
+			ohlcv,
 			fundamental,
 			technical,
 			news,
